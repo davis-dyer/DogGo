@@ -1,40 +1,83 @@
-﻿using DogGo.Models;
+﻿using DogGo.Interfaces;
+using DogGo.Models;
+using DogGo.Models.ViewModels;
 using DogGo.Repositories;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
 
 namespace DogGo.Controllers
 {
     public class WalkersController : Controller
     {
-
         private readonly IWalkerRepository _walkerRepo;
+        private readonly IWalkRepository _walkRepo;
+        private readonly IOwnerRepository _ownerRepo;
 
         // ASP.NET will give us an instance of our Walker Repository. This is called "Dependency Injection"
-        public WalkersController(IWalkerRepository walkerRepository)
+        public WalkersController(IWalkerRepository walkerRepository, IWalkRepository walkRepository, IOwnerRepository ownerRepository)
         {
             _walkerRepo = walkerRepository;
+            _walkRepo = walkRepository;
+            _ownerRepo = ownerRepository;
         }
+
+
+
         // GET: WalkersController
         public ActionResult Index()
         {
-            List<Walker> walkers = _walkerRepo.GetAllWalkers();
+            int ownerId = GetCurrentUserId();
 
-            return View(walkers);
+            Owner owner = _ownerRepo.GetOwnerById(ownerId);
+
+            if (owner == null)
+            {
+                List<Walker> walkers = _walkerRepo.GetAllWalkers();
+                return View(walkers);
+            }
+            else
+            {
+                List<Walker> walkers = _walkerRepo.GetWalkersInNeighborhood(owner.NeighborhoodId);
+                return View(walkers);
+            }
         }
+
+
 
         // GET: WalkersController/Details/5
         public ActionResult Details(int id)
         {
             Walker walker = _walkerRepo.GetWalkerById(id);
+            List<Walk> walks = _walkRepo.GetWalksByWalkerId(walker.Id).OrderBy(w => w.Dog.Name).ToList();
+
+            int totalWalkTime = 0;
+            foreach (Walk walk in walks)
+            {
+
+                totalWalkTime += walk.Duration;
+            };
 
             if (walker == null)
             {
                 return NotFound();
             }
 
-            return View(walker);
+            TimeSpan time = TimeSpan.FromSeconds(totalWalkTime);
+            string hoursMinutes = time.ToString(@"hh\:mm");
+
+            walker.HoursMinutes = hoursMinutes;
+
+            WalkerDetailsViewModel viewModel = new WalkerDetailsViewModel()
+            {
+                Walker = walker,
+                Walks = walks,
+            };
+
+            return View(viewModel);
         }
 
         // GET: WalkersController/Create
@@ -98,6 +141,16 @@ namespace DogGo.Controllers
             {
                 return View();
             }
+        }
+
+        private int GetCurrentUserId()
+        {
+            string id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (id == null)
+            {
+                return 0;
+            }
+            return int.Parse(id);
         }
     }
 }

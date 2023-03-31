@@ -15,6 +15,7 @@ namespace DogGo.Controllers
         {
             _dogRepo = dogRepository;
         }
+
         // GET: DogsController
         public ActionResult Index()
         {
